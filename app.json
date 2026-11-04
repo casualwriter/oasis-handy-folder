@@ -1,0 +1,1 @@
+{ "title": "Handy Folder", "description": "Browse any folder: preview Markdown (with math), HTML, images, PDF, CSV/Excel; edit, run, open, reveal. Home page with shortcuts.", "icon": "🗂️", "order": 0, "permissions": ["fs", "shell", "system"] }

@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en" data-oasis-noreload>
+<head>
+<meta charset="UTF-8">
+<title>Handy Folder</title>
+<link rel="stylesheet" href="/_oasis/oasis.css">
+<style>
+  .left { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--panel); }
+  .left .bar { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .left .bar select { flex: 1; min-width: 120px; }
+  .left .bar select#sort { flex: none; min-width: 0; width: auto; }
+  .crumbs { padding: 6px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; overflow-x: auto; }
+  .crumbs a { color: var(--text-2); text-decoration: none; cursor: pointer; }
+  .crumbs a:hover { color: var(--accent); }
+  #list { flex: 1; overflow: auto; padding: 4px; list-style: none; margin: 0; }
+  #list li { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+  #list li:hover { background: var(--panel-2); }
+  #list li.on { background: var(--accent-soft); }
+  #list .ic { width: 20px; text-align: center; flex: none; }
+  #list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #list .mt { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .left.drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  .right { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .vhead { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  .vhead .title { font-weight: 600; margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #vbody { flex: 1; overflow: auto; min-height: 0; }
+  #vbody .o-md { padding: 22px 30px; max-width: 920px; }
+  #vbody pre.code { margin: 0; border-radius: 0; background: var(--panel); counter-reset: ln; padding: 10px 0; font-size: 12.5px; }
+  #vbody pre.code span { display: block; padding: 0 14px 0 0; white-space: pre-wrap; }
+  #vbody pre.code span::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 44px; margin-right: 12px; text-align: right; color: var(--muted); }
+  #vbody iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+  #vbody img.pic { max-width: 100%; display: block; margin: 20px auto; box-shadow: var(--shadow); }
+  #vbody .info { padding: 24px 30px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 8px 0 18px; }
+  .tile { display: flex; gap: 10px; align-items: center; padding: 10px 12px; cursor: pointer; text-decoration: none; color: var(--text); }
+  .tile:hover { border-color: var(--accent); }
+  .tile small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 30px 0; }
+  .editor { display: flex; height: 100%; }
+  .editor textarea { flex: 1; border: 0; resize: none; padding: 14px; font: 13px/1.6 var(--mono); background: var(--panel); color: var(--text); outline: none; }
+  .editor .pv { flex: 1; overflow: auto; border-left: 1px solid var(--line); }
+  #out { border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; height: 34%; min-height: 120px; }
+  #out .o-row { padding: 6px 12px; border-bottom: 1px solid var(--line); }
+  #out pre { flex: 1; margin: 0; border-radius: 0; overflow: auto; font-size: 12px; }
+  /* English | 中文 side by side: each block of the original next to its translation */
+  #vbody .o-md.dual { max-width: none; display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
+  #vbody .o-md.dual > * { min-width: 0; }
+  #vbody .o-md.dual > .wide { grid-column: 1 / -1; }
+  #vbody .o-md.dual > table { display: block; overflow-x: auto; }
+  /* right-click menu */
+  .ctx { position: fixed; z-index: 50; min-width: 190px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+  .ctx button { display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px 10px; border: 0; border-radius: 4px; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+  .ctx button:hover { background: var(--accent-soft); }
+  .ctx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+</style>
+</head>
+<body>
+<o-shell icon="🗂️" heading="Handy Folder" id="shell">
+  <div slot="actions">
+    <button class="o-btn" id="b-home" title="Home page with shortcuts"><o-icon name="home"></o-icon> Home</button>
+    <button class="o-btn ghost icon" id="b-settings" title="Settings (settings.json)"><o-icon name="settings"></o-icon></button>
+    <button class="o-btn ghost icon" id="b-help" title="User manual (F1)"><o-icon name="book"></o-icon></button>
+  </div>
+  <o-split key="hf.split" size="330px" min="200">
+    <div class="left" id="left">
+      <div class="bar">
+        <select id="root" class="o-select" title="Folder"></select>
+        <button class="o-btn icon" id="b-up" title="Up (Backspace)"><o-icon name="up"></o-icon></button>
+        <button class="o-btn icon" id="b-refresh" title="Refresh"><o-icon name="refresh"></o-icon></button>
+        <select id="sort" class="o-select" title="Sort the list (folders stay first)">
+          <option value="name">Name A→Z</option><option value="name-">Name Z→A</option>
+          <option value="date">Date, newest</option><option value="date-">Date, oldest</option>
+          <option value="size">Size, largest</option><option value="size-">Size, smallest</option>
+          <option value="type">Type</option>
+        </select>
+        <button class="o-btn icon" id="b-newfile" title="New file (YYYYMMDD-…)"><o-icon name="file"></o-icon></button>
+        <button class="o-btn icon" id="b-newdir" title="New folder"><o-icon name="folder"></o-icon></button>
+        <input id="filter" class="o-input" placeholder="Filter…" style="width:100%">
+      </div>
+      <div class="crumbs" id="crumbs"></div>
+      <ul id="list"></ul>
+    </div>
+    <div class="right">
+      <div class="vhead" id="vhead"><span class="title" id="vtitle">…</span></div>
+      <div id="vbody"></div>
+      <div id="out" hidden>
+        <div class="o-row"><b class="o-small" id="out-title">Output</b><span class="o-spacer"></span>
+          <button class="o-btn sm" id="out-stop"><o-icon name="stop"></o-icon> Stop</button>
+          <button class="o-btn sm ghost" id="out-close"><o-icon name="x"></o-icon></button></div>
+        <pre id="out-text"></pre>
+      </div>
+    </div>
+  </o-split>
+</o-shell>
+<script src="/_oasis/oasis.js"></script>
+<script src="/_oasis/ui.js"></script>
+<script src="/_oasis/md.js"></script>
+<script>
+(function () {
+  'use strict';
+  // ---------------------------------------------------------------- settings
+  // settings.json and home.md live next to this index.html. app.json "dataDir" moves them
+  // ("~/shared/handyfolder", "D:\\data\\hf", or a folder relative to this one). See findDataDir().
+  let DIR = '', HERE = '';   // the data folder, and this app's own folder (README.md = the user manual)
+  let runOnly = '';         // a folder from the command line: shown in the root list, not saved
+  let single = false;       // a single app (oasis.exe <folder>): "~" is outside its sandbox, so it starts in its own folder
+  const dataFile = (name) => DIR + '\\' + name;
+  // a folder inside the Oasis data folder (.oasis, or system in older folders), for messages
+  const dataOf = (name) => ((oasis.info && oasis.info.data) || '.oasis') + '\\' + name;
+  const DEFAULTS = {
+    roots: ['~'],                                 // default root ("~" = the Oasis folder; a single app: its own folder); add more with the root list
+    editor: '',                                   // command for the editor button; empty = VS Code (code "{file}")
+    hidden: '^(\\.git|\\.oasis|node_modules|__pycache__|\\.venv)$',
+    run: {                                          // extension → command. {file} {name} {dir}; "open" = Windows default app
+      py: 'python "{file}"', 'bat,cmd': '"{file}"', ps1: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{file}"',
+      js: 'node "{file}"', go: 'go run "{file}"', 'exe,msi,lnk,url,hta': 'open',
+    },
+    tools: {                                        // buttons on every folder page; run in that folder. "start …" opens a window
+      'CMD here': 'start "" cmd /k', 'PowerShell here': 'start "" powershell -NoExit', Explorer: 'explorer .',
+      'Git status': 'git status', 'List (dir)': 'dir',
+    },
+  };
+  const homeMd = () => `# 🗂️ My home page
+
+This is **home.md**, next to the Handy Folder settings. Edit it with ✎. Every list item that is a link becomes a tile.
+
+## Shortcuts
+
+${single ? '' : `- [Oasis apps](/apps)
+- [Shared data](/shared)
+- [User guide](/docs/USER_GUIDE.md)
+- [Markdown & math](/docs/MARKDOWN.md)
+`}- [Handy Folder on GitHub](https://github.com/casualwriter/oasis-handy-folder)
+- [Amoy Technology](https://amoy-tech.com)
+- [Notepad](run:notepad.exe)
+
+## Notes
+
+Links: \`/path\` = inside the root folder · \`C:\\full\\path\` · \`https://…\` opens the browser · \`run:command\` runs a command.
+`;
+  const TEXT = /\.(txt|log|md|markdown|js|mjs|ts|json|go|py|css|html?|xml|ya?ml|toml|ini|cfg|conf|sql|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|kt|rs|rb|php|lua|r|csv|tsv|env|gitignore|editorconfig|mod|sum|svg|vue|jsx|tsx)$/i;
+  const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', svg: 'image/svg+xml' };
+  const ICON = (f) => f.dir ? '📁' : /\.(md|markdown)$/i.test(f.name) ? '📝' : /\.html?$/i.test(f.name) ? '🌐' : IMG[ext(f.name)] ? '🖼️' : /\.(py)$/i.test(f.name) ? '🐍'
+    : /\.(bat|cmd|ps1|exe|msi|sh)$/i.test(f.name) ? '⚙️' : /\.(csv|tsv|xlsx|xls)$/i.test(f.name) ? '📊' : /\.pdf$/i.test(f.name) ? '📕' : /\.(zip|7z|rar|gz)$/i.test(f.name) ? '🗜️' : '📄';
+  const ext = (n) => (n.match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
+  const join = (a, b) => a.replace(/[\\/]+$/, '') + '\\' + b;
+  const parentOf = (p) => p.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') || p;
+  // Markdown images: <img src="pic.png"> would be looked up next to this app, not next to the .md file.
+  // So each relative image is read from the document's folder and shown as an inline (data:) image.
+  const imgCache = new Map();
+  const mdHtml = async (text, dir) => {
+    const box = document.createElement('div');
+    box.innerHTML = oasis.md(text);
+    await Promise.all([...box.querySelectorAll('img')].map(async (img) => {
+      const raw = (img.getAttribute('src') || '').split(/[?#]/)[0];
+      if (!raw || /^(https?:|data:|blob:|\/\/)/i.test(raw) || raw.startsWith('/')) return; // web, inline and root-relative: leave
+      let rel; try { rel = decodeURIComponent(raw); } catch (_) { rel = raw; }
+      const mime = IMG[ext(rel)];
+      if (!mime) return;
+      const full = /^[a-z]:[\\/]/i.test(rel) ? rel : join(dir, rel.replace(/^\.[\\/]/, '').replace(/\//g, '\\'));
+      try {
+        let b64 = imgCache.get(full);
+        if (b64 === undefined) { b64 = await oasis.fs.read(full, { encoding: 'base64' }); if (imgCache.size > 40) imgCache.clear(); imgCache.set(full, b64); }
+        img.src = `data:${mime};base64,${b64}`;
+      } catch (e) { img.title = 'image not found: ' + rel; img.alt = (img.alt || '') + ' [missing: ' + rel + ']'; }
+    }));
+    return box.innerHTML;
+  };
+  const size = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+  const day = (iso) => iso ? iso.slice(0, 16).replace('T', ' ') : '';
+
+  let cfg = DEFAULTS, mount = '', root = '', cwd = '', entries = [], sortBy = 'name', selected = null, job = null, codeCmd = null, oasisRoot = '';
+
+  // Paths: everything is a full Windows path; "~" is the Oasis folder.
+  const full = (p) => p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? (oasisRoot + p.slice(1).replace(/\//g, '\\')).replace(/\\$/, '') : p;
+
+  // "/apps/x/index.html" for a file inside the Oasis folder (Oasis serves it), else null
+  const webUrl = (p) => mount && p.toLowerCase().startsWith(mount.toLowerCase() + '\\') ? p.slice(mount.length).replace(/\\/g, '/') : null;
+
+  // This app's folder (full path): the served folder + the page path. Then the optional "dataDir" of its app.json.
+  async function findDataDir() {
+    const here = HERE = mount.replace(/[\\/]+$/, '') + decodeURIComponent(location.pathname).replace(/[^/]*$/, '').replace(/\/$/, '').replace(/\//g, '\\');
+    const meta = await oasis.fs.readJSON(here + '\\app.json').catch(() => null);
+    const d = String((meta && meta.dataDir) || '').trim().replace(/\//g, '\\').replace(/\\$/, '');
+    return !d || d === '.' ? here : /^(~|[a-z]:|\\\\)/i.test(d) ? full(d) : here + '\\' + d;
+  }
+  async function loadSettings() {
+    DIR = await findDataDir();
+    await oasis.fs.mkdir(DIR);
+    const saved = await oasis.fs.readJSON(dataFile('settings.json')).catch(() => null);
+    const def = single ? { ...DEFAULTS, roots: [mount] } : DEFAULTS;
+    cfg = { ...def, ...(saved || {}), run: { ...def.run, ...((saved && saved.run) || {}) }, tools: { ...def.tools, ...((saved && saved.tools) || {}) } };
+    if (!saved) await oasis.fs.writeJSON(dataFile('settings.json'), def);
+  }
+  const saveSettings = () => oasis.fs.writeJSON(dataFile('settings.json'), runOnly ? { ...cfg, roots: cfg.roots.filter((r) => r !== runOnly) } : cfg);
+  const runFor = (name) => { const e = ext(name); for (const [k, v] of Object.entries(cfg.run)) if (k.split(',').map((x) => x.trim()).includes(e)) return v; return null; };
+  const fill = (cmd, file) => cmd.replace(/\{file\}/g, file).replace(/\{name\}/g, file.split('\\').pop()).replace(/\{dir\}/g, parentOf(file));
+
+  // ---------------------------------------------------------------- roots & access
+  function renderRoots() {
+    oasis('root').innerHTML = cfg.roots.map((r) => `<option value="${oasis.esc(r)}">${oasis.esc(r === '~' ? 'Oasis folder' : r)}</option>`).join('') + '<option value="__add">＋ Add a folder…</option>';
+    oasis.val('root', root);
+  }
+
+  // A folder outside the sandbox can be opened after the user agrees to add it to Settings › Security › Extra folders.
+  async function ensureAccess(path) {
+    try { await oasis.fs.list(path); return true; } catch (e) {
+      if (!/outside the sandbox/.test(e.message)) { oasis.toast(e.message, 'error'); return false; }
+      const ok = await oasis.ui.confirm(`"${path}" is outside the Oasis sandbox.\n\nAllow Oasis apps to read and write this folder?\nIt is added to Settings › Security › Extra folders (you can remove it there).`, { title: 'Add folder', ok: 'Allow' });
+      if (!ok) return false;
+      const c = await oasis.config.get();
+      c.security.extra_paths = [...new Set([...(c.security.extra_paths || []), path])];
+      await oasis.config.set(c);
+      return true;
+    }
+  }
+
+  async function addRoot(path) {
+    if (!path) path = await oasis.sys.pick('folder', { title: 'Choose a folder for Handy Folder' });
+    if (!path) { oasis.val('root', root); return; }
+    if (!(await ensureAccess(path))) { oasis.val('root', root); return; }
+    if (!cfg.roots.includes(path)) { cfg.roots.push(path); await saveSettings(); }
+    root = path;
+    renderRoots();
+    await go(full(path));
+  }
+
+  // ---------------------------------------------------------------- folder list
+  async function go(dir, showReadme = true) {
+    cwd = dir;
+    try { localStorage.setItem('hf.cwd', cwd); localStorage.setItem('hf.root', root); } catch (_) { /* no storage */ }
+    entries = await oasis.fs.list(cwd);
+    renderList();
+    renderCrumbs();
+    if (showReadme) await showFolder();
+  }
+
+  function renderList() {
+    const q = oasis.val('filter').toLowerCase();
+    const hide = new RegExp(cfg.hidden || '^$', 'i');
+    let items = entries.filter((f) => !hide.test(f.name) && (!q || f.name.toLowerCase().includes(q)));
+    // sortBy: name | date | size | type, a trailing "-" reverses it. Folders stay first; ties fall back to the name.
+    const key = sortBy.replace('-', ''), rev = sortBy.endsWith('-') ? -1 : 1;
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true });
+    const ext = (f) => (f.dir || !f.name.includes('.') ? '' : f.name.split('.').pop().toLowerCase());
+    const cmp = {
+      name: byName,
+      date: (a, b) => b.mtime.localeCompare(a.mtime),     // newest first
+      size: (a, b) => b.size - a.size,                    // largest first
+      type: (a, b) => ext(a).localeCompare(ext(b)),
+    }[key] || byName;
+    items.sort((a, b) => (b.dir - a.dir) || rev * cmp(a, b) || byName(a, b));
+    const ul = oasis('list');
+    ul.textContent = '';
+    for (const f of items) {
+      const li = document.createElement('li');
+      li.innerHTML = '<span class="ic"></span><span class="nm"></span><span class="mt"></span>';
+      li.children[0].textContent = ICON(f);
+      li.children[1].textContent = f.name;
+      // the right column shows what the list is sorted by: the date for a date sort, else the size
+      li.children[2].textContent = key === 'date' ? day(f.mtime).slice(2, 10) : f.dir ? '' : size(f.size);
+      li.title = f.name + '\n' + day(f.mtime) + (f.dir ? '' : ' · ' + size(f.size));
+      li.onclick = () => { const p = join(cwd, f.name); if (f.dir) go(p).catch(fail); else showFile(p, f).catch(fail); };
+      if (selected === join(cwd, f.name)) li.className = 'on';
+      ul.append(li);
+    }
+    if (!items.length) ul.innerHTML = '<li class="o-muted o-small">(empty)</li>';
+  }
+
+  function renderCrumbs() {
+    const base = full(root);
+    const rel = cwd.length > base.length ? cwd.slice(base.length + 1).split('\\') : [];
+    const box = oasis('crumbs');
+    box.textContent = '';
+    const crumb = (label, path) => { const a = document.createElement('a'); a.textContent = label; a.onclick = () => go(path).catch(fail); box.append(a); };
+    crumb(root === '~' ? 'Oasis' : base.split('\\').pop() || base, base);
+    rel.forEach((seg, i) => { box.append(' › '); crumb(seg, join(base, rel.slice(0, i + 1).join('\\'))); });
+  }
+
+  // ---------------------------------------------------------------- viewer
+  // extra line icons for the icon-only buttons (added to the Oasis set for this page only)
+  Object.assign(oasis.ui.icons, {
+    print: '<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/>',
+    rename: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>',
+    reveal: '<path d="M10.7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H20a2 2 0 0 1 2 2v4"/><circle cx="17" cy="17" r="3"/><path d="m21 21-1.9-1.9"/>',
+    translate: '<path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
+    columns: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
+  });
+  let actions = [];   // the header buttons, also shown in the right-click menu
+  function header(title, buttons) {
+    const h = oasis('vhead');
+    h.innerHTML = '<span class="title"></span>';
+    h.firstChild.textContent = title;
+    h.firstChild.title = title;
+    actions = buttons.filter(Boolean);
+    for (const b of actions.filter((x) => !x.menuOnly)) {   // menuOnly: only in the right-click menu
+      const el = document.createElement('button');
+      el.className = 'o-btn sm' + (b.primary ? ' primary' : '') + (b.danger ? ' danger' : '');
+      if (b.id) el.id = b.id;
+      if (b.icon) el.append(oasis.ui.icon(b.icon));
+      else el.append(b.label);                               // a button with an icon shows only the icon
+      el.title = b.title || b.label;
+      el.onclick = () => Promise.resolve(b.run(el)).catch(fail);
+      h.append(el);
+    }
+  }
+
+  async function showFolder() {
+    selected = null;
+    renderList();
+    const readme = entries.find((f) => /^readme\.(md|markdown|txt)$/i.test(f.name));
+    const body = oasis('vbody');
+    header('📁 ' + cwd, [
+      { label: 'Explorer', icon: 'folder', run: () => sh('explorer .', cwd, false) },
+      { label: '+ shortcut', icon: 'pin', title: 'Add this folder to your home page', run: () => addShortcut(cwd) },
+      readme && /\.(md|markdown)$/i.test(readme.name) && { label: 'Print README', icon: 'print', run: async () => oasis.print(await mdHtml(await oasis.fs.read(join(cwd, readme.name)), cwd), readme.name) },
+      { label: 'Copy path', icon: 'copy', title: 'Copy path: ' + cwd, run: () => copy(cwd) },
+    ]);
+    const nDir = entries.filter((f) => f.dir).length, nFile = entries.length - nDir, total = entries.reduce((t, f) => t + (f.dir ? 0 : f.size), 0);
+    body.innerHTML = '<div class="tools" id="tools"></div>' + (readme ? '<article class="o-md" id="readme"></article>'
+      : `<div class="info o-muted">${nDir} folders · ${nFile} files · ${size(total)}<br>No README.md here — add one with <b>New file</b> to describe this folder.<br><br>Tip: drop files from Explorer onto the list to copy them here.</div>`);
+    for (const [label, cmd] of Object.entries(cfg.tools)) {
+      const b = document.createElement('button');
+      b.className = 'o-btn sm';
+      b.append(oasis.ui.icon('terminal'), ' ' + label);
+      b.title = cmd;
+      b.onclick = () => sh(cmd, cwd, !/^start\b|^explorer\b/i.test(cmd)).catch(fail);
+      oasis('tools').append(b);
+    }
+    if (readme) {
+      const p = join(cwd, readme.name);
+      const text = await oasis.fs.read(p);
+      oasis('readme').innerHTML = /\.txt$/i.test(p) ? '<pre>' + oasis.esc(text) + '</pre>' : await mdHtml(text, cwd);
+      wireLinks(oasis('readme'), cwd);
+    }
+  }
+
+  async function showFile(p, f) {
+    selected = p;
+    shown.delete(p);   // the file may have changed: translate again when asked
+    renderList();
+    f = f || await oasis.fs.stat(p);
+    const name = p.split('\\').pop(), e = ext(name), run = runFor(name);
+    const body = oasis('vbody');
+    const isText = TEXT.test(name) || f.size === 0;
+    header(ICON(f) + ' ' + name + '  ·  ' + size(f.size) + '  ·  ' + day(f.mtime), [
+      isText && { label: 'Edit', icon: 'edit', run: () => edit(p) },
+      /^(md|markdown)$/.test(e) && { label: 'Print', icon: 'print', title: 'Print or save as PDF', run: async () => oasis.print(await mdHtml(await oasis.fs.read(p), parentOf(p)), name) },
+      /^(md|markdown)$/.test(e) && { id: 'b-tr', menuOnly: true, label: 'Translate', run: () => translateView(p) },
+      { label: 'Open', icon: 'external', title: 'Open with its Windows app', run: () => oasis.shell.open(p) },
+      /^\/apps\/.+\/index\.html$/i.test(webUrl(p) || '') && { label: 'Launch app', icon: 'play', primary: true, title: 'Launch this Oasis app (Alt+Home returns to the launcher)', run: () => { location.href = webUrl(p).replace(/index\.html$/i, ''); } },
+      run && { label: 'Run', icon: 'play', primary: true, title: 'Run: ' + (run === 'open' ? 'Windows default' : fill(run, p)), run: () => runFile(p, run) },
+      codeCmd && { label: cfg.editor ? 'Open in editor' : 'Open in VS Code', icon: 'code', menuOnly: true, run: () => sh(fill(codeCmd, p), parentOf(p), false) },
+      { label: 'Reveal in Explorer', icon: 'reveal', run: () => sh(`explorer /select,"${p}"`, parentOf(p), false) },
+      { label: 'Copy path', icon: 'copy', title: 'Copy path: ' + p, run: () => copy(p) },
+      { label: 'Rename', icon: 'rename', menuOnly: true, run: () => rename(p) },
+      { label: 'Move to trash', icon: 'trash', danger: true, title: 'Move to trash (it can be brought back)', run: () => remove(p) },
+    ]);
+    body.innerHTML = '<div class="o-empty">Loading…</div>';
+    if (/^(md|markdown)$/.test(e)) {
+      body.innerHTML = '<article class="o-md"></article>';
+      body.firstChild.innerHTML = await mdHtml(await oasis.fs.read(p), parentOf(p));
+      wireLinks(body.firstChild, parentOf(p));
+    } else if (/^html?$/.test(e)) {
+      // shown in a sandboxed frame: scripts run, but without access to Oasis (like HTA application="no")
+      // files inside the Oasis folder are also served by Oasis, so relative CSS/images resolve via <base>
+      const frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups');
+      const html = await oasis.fs.read(p);
+      const url = webUrl(p);
+      frame.srcdoc = url ? html.replace(/<head[^>]*>/i, (m) => `${m}<base href="${location.origin + url.replace(/[^/]*$/, '')}">`) : html;
+      body.textContent = '';
+      body.append(frame);
+    } else if (IMG[e]) {
+      if (f.size > 25e6) return info(f, 'Image too large to preview.');
+      body.innerHTML = `<img class="pic" alt="" src="data:${IMG[e]};base64,${await oasis.fs.read(p, { encoding: 'base64' })}">`;
+    } else if (e === 'pdf' && f.size < 40e6) {
+      const b64 = await oasis.fs.read(p, { encoding: 'base64' });
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      body.innerHTML = '<iframe></iframe>';
+      body.firstChild.src = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    } else if (/^(csv|tsv)$/.test(e)) {
+      const t = await oasis.fs.read(p);
+      const rows = parseCSV(t.replace(/^\ufeff/, ''), e === 'tsv' ? '\t' : null);
+      body.innerHTML = '<o-table sortable mono></o-table>';
+      body.firstChild.data = { columns: rows.shift() || [], rows };
+    } else if (/^(xlsx|xlsm)$/.test(e)) {
+      try {
+        const d = await oasis.ext.call('excel', 'read', { path: p, max_rows: 2000 });
+        body.innerHTML = `<div class="o-small o-muted" style="padding:8px 14px">Sheet ${oasis.esc(d.sheet)} · ${d.total} rows</div><o-table sortable mono></o-table>`;
+        body.lastChild.data = { columns: d.columns, rows: d.rows };
+      } catch (err) { info(f, 'Excel preview needs the excel extension (Python + openpyxl): ' + err.message); }
+    } else if (e === 'json') {
+      const t = await oasis.fs.read(p);
+      let pretty = t;
+      try { const j = JSON.parse(t); pretty = JSON.stringify(j, null, 2); if (Array.isArray(j) && j.length && typeof j[0] === 'object') { body.innerHTML = '<o-table sortable mono></o-table>'; body.firstChild.rows = j; return; } } catch (_) { /* show as text */ }
+      code(pretty);
+    } else if (isText) {
+      if (f.size > 2e6) return info(f, 'Large text file — open it with Edit or Open.');
+      code(await oasis.fs.read(p));
+    } else {
+      info(f);
+    }
+  }
+
+  function code(text) {
+    const body = oasis('vbody');
+    body.innerHTML = '<pre class="code"></pre>';
+    const pre = body.firstChild;
+    for (const line of text.replace(/\r\n?/g, '\n').split('\n')) { const s = document.createElement('span'); s.textContent = line || ' '; pre.append(s); }
+  }
+
+  function info(f, note) {
+    oasis('vbody').innerHTML = `<div class="info"><table class="o-table" style="max-width:520px">
+      <tr><th>Name</th><td></td></tr><tr><th>Size</th><td>${size(f.size)}</td></tr><tr><th>Modified</th><td>${day(f.mtime)}</td></tr></table>
+      <p class="o-muted">${oasis.esc(note || 'No preview for this type. Use Open or ► Run.')}</p></div>`;
+    oasis('vbody').querySelector('td').textContent = f.name;
+  }
+
+  // Links inside Markdown: relative paths open here, http opens the browser, run: runs a command.
+  function wireLinks(el, base) {
+    el.addEventListener('click', async (e) => {
+      const a = e.target.closest('a[href]');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (/^(https?:|mailto:)/i.test(href)) return; // oasis.js opens the browser
+      e.preventDefault();
+      if (href.startsWith('#')) { const id = decodeURIComponent(href.slice(1)); (el.querySelector('#' + CSS.escape(id)) || document.getElementById(id))?.scrollIntoView(); return; }
+      await follow(decodeURIComponent(href.split('#')[0]), base);
+    });
+  }
+
+  async function follow(target, base) {
+    if (/^run:/i.test(target)) return sh(target.slice(4).trim(), cwd, false, true);
+    let p = target;
+    if (/^[\\/]/.test(p)) p = join(full(root), p.replace(/^[\\/]+/, '').replace(/\//g, '\\'));      // /x = inside the root
+    else if (!/^[a-z]:/i.test(p) && !p.startsWith('~')) p = base + '\\' + p.replace(/\//g, '\\');   // relative
+    p = full(p).replace(/\\\.\\/g, '\\');
+    while (/\\[^\\]+\\\.\.(\\|$)/.test(p)) p = p.replace(/\\[^\\]+\\\.\.(\\|$)/, '\\');
+    p = p.replace(/\\$/, '');
+    let st;
+    try { st = await oasis.fs.stat(p); } catch (err) {
+      if (/outside the sandbox/.test(err.message) && await ensureAccess(parentOf(p))) st = await oasis.fs.stat(p); else throw err;
+    }
+    if (st.dir) await go(p); else { if (parentOf(p) !== cwd) await go(parentOf(p), false); await showFile(p, st); }
+  }
+
+  // ---------------------------------------------------------------- home page
+  async function home() {
+    selected = null;
+    renderList();
+    const p = dataFile('home.md');
+    if (!(await oasis.fs.exists(p))) await oasis.fs.write(p, homeMd());
+    const text = await oasis.fs.read(p);
+    header('🏠 Home', [
+      { label: 'Edit', icon: 'edit', run: () => edit(full(p)) },
+      { label: '+ shortcut', icon: 'pin', title: 'Add the current folder', run: () => addShortcut(cwd) },
+    ]);
+    const body = oasis('vbody');
+    body.innerHTML = '<article class="o-md"></article>';
+    const art = body.firstChild;
+    art.innerHTML = oasis.md(text);
+    // list items that are only a link become tiles
+    art.querySelectorAll('ul').forEach((ul) => {
+      const links = [...ul.children].map((li) => li.children.length === 1 && li.firstChild.tagName === 'A' && li.textContent.trim() === li.firstChild.textContent.trim() ? li.firstChild : null);
+      if (!links.length || links.includes(null)) return;
+      const grid = document.createElement('div');
+      grid.className = 'tiles';
+      for (const a of links) {
+        const href = a.getAttribute('href');
+        const t = document.createElement('a');
+        t.className = 'o-card tile';
+        t.href = href;
+        t.innerHTML = '<span style="font-size:20px"></span><span><b></b><small></small></span>';
+        t.firstChild.textContent = /^https?:/.test(href) ? '🌐' : /^run:/.test(href) ? '⚙️' : /\.\w+$/.test(href) ? '📝' : '📁';
+        t.querySelector('b').textContent = a.textContent;
+        t.querySelector('small').textContent = href;
+        grid.append(t);
+      }
+      ul.replaceWith(grid);
+    });
+    wireLinks(art, full(root));
+  }
+
+  async function addShortcut(path) {
+    const label = await oasis.ui.prompt('Name of the shortcut', path.split('\\').pop() || path, { title: '+ shortcut' });
+    if (!label) return;
+    const p = dataFile('home.md');
+    let text = (await oasis.fs.exists(p)) ? await oasis.fs.read(p) : homeMd();
+    const item = `- [${label.replace(/[[\]]/g, '')}](${path.replace(/\)/g, '%29')})`;
+    text = /^## Shortcuts\s*$/m.test(text) ? text.replace(/^## Shortcuts\s*\n(\s*\n)?/m, (m) => m.trimEnd() + '\n\n' + item + '\n') : text + '\n\n## Shortcuts\n\n' + item + '\n';
+    await oasis.fs.write(p, text);
+    oasis.toast('Added to your home page', 'success');
+  }
+
+  // ---------------------------------------------------------------- editor
+  async function edit(p) {
+    const text = await oasis.fs.read(p);
+    const isMd = /\.(md|markdown)$/i.test(p);
+    let dirty = false;
+    const body = oasis('vbody');
+    body.innerHTML = `<div class="editor"><textarea spellcheck="false"></textarea>${isMd ? '<div class="pv"><article class="o-md"></article></div>' : ''}</div>`;
+    const ta = body.querySelector('textarea');
+    ta.value = text;
+    const pv = body.querySelector('.pv article');
+    // Markdown: the text and a live preview side by side, or the text alone (the choice is remembered)
+    let showPv = true;
+    try { showPv = localStorage.getItem('hf.preview') !== '0'; } catch (_) { /* no storage */ }
+    if (pv) pv.parentNode.hidden = !showPv;
+    const setPv = (on) => {
+      showPv = on;
+      pv.parentNode.hidden = !on;
+      if (on) render();
+      try { localStorage.setItem('hf.preview', on ? '1' : '0'); } catch (_) { /* no storage */ }
+      ta.focus();
+    };
+    let rendering = 0;
+    const render = async () => { if (!pv || !showPv) return; const n = ++rendering, html = await mdHtml(ta.value, parentOf(p)); if (n === rendering) pv.innerHTML = html; };
+    render();
+    ta.addEventListener('input', () => { dirty = true; render(); });
+    const save = async () => { await oasis.fs.write(p, ta.value); dirty = false; oasis.toast('Saved (the old version is kept in ' + (oasis.standalone ? dataOf('backup') : 'Recovery') + ')', 'success', 1500); };
+    ta.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); save().catch(fail); }
+      if (e.key === 'Tab') { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); }
+    });
+    header('✎ ' + p.split('\\').pop(), [
+      { label: 'Save', icon: 'save', primary: true, title: 'Ctrl+S', run: save },
+      isMd && { label: 'Preview', icon: 'columns', title: 'Show or hide the preview', run: () => setPv(!showPv) },
+      { label: 'Close', icon: 'x', run: async () => { if (dirty && !(await oasis.ui.confirm('Discard unsaved changes?', { danger: true, ok: 'Discard' }))) return; const st = await oasis.fs.stat(p); if (p === dataFile('home.md')) home(); else showFile(p, st); } },
+    ]);
+    ta.focus();
+    ta.setSelectionRange(0, 0);
+    ta.scrollTop = 0;
+    // keep the preview roughly in step with the text
+    if (pv) ta.addEventListener('scroll', () => { const s = pv.parentNode; s.scrollTop = ta.scrollTop / Math.max(1, ta.scrollHeight - ta.clientHeight) * (s.scrollHeight - s.clientHeight); });
+  }
+
+  // ---------------------------------------------------------------- run, tools, files
+  async function runFile(p, cmd) {
+    if (cmd === 'open') return oasis.shell.open(p);
+    return sh(fill(cmd, p), parentOf(p), true);
+  }
+
+  // Run a command in a folder. stream=true shows live output below the viewer.
+  // ---------------------------------------------------------------- translate the preview in place (like Chrome)
+  // Uses Google's free web endpoint (no key; not an official API, it may be slow or refuse many requests).
+  // A translated copy of the preview is shown in place; the button switches back to the original.
+  // Each block (heading, paragraph, list item, table cell) becomes its translation as plain text, so bold and
+  // links inside a block are lost in the copy. Code blocks are left as they are. The text goes to Google.
+  const GT = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-TW&dt=t&q=';
+  const CHUNK = 3500;                     // characters per request (the text goes in the URL)
+  const BLOCKS = 'h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,blockquote,figcaption,summary';
+  const shown = new Map();                // file -> { zh, dual } translated <article>s (kept while the file is open)
+  async function gt(text) {
+    const r = await fetch(GT + encodeURIComponent(text));
+    if (!r.ok) throw new Error(r.status === 429 ? 'Google Translate refused (too many requests); try again later' : 'Google Translate: HTTP ' + r.status);
+    return ((await r.json())[0] || []).map((x) => x[0] || '').join('');
+  }
+  // translate many short texts with few requests: join them with new lines, split the answer again; 3 requests at a time
+  async function gtMany(texts, progress) {
+    const out = new Array(texts.length), parts = [];
+    for (let i = 0; i < texts.length;) {
+      let j = i, len = 0;
+      while (j < texts.length && (j === i || len + texts[j].length < CHUNK)) len += texts[j++].length + 1;
+      parts.push([i, j]);
+      i = j;
+    }
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (next < parts.length) {
+        const [i, j] = parts[next++], part = texts.slice(i, j), t = (await gt(part.join('\n'))).split('\n');
+        if (t.length === part.length) t.forEach((x, k) => { out[i + k] = x.trim(); });
+        else for (let k = 0; k < part.length; k++) out[i + k] = (await gt(part[k])).trim();   // lines did not match: one by one
+        progress(++done, parts.length);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    return out;
+  }
+  // mode: 'en' (the original), 'zh' (the translation) or 'dual' (both side by side); none = the next one
+  async function translateView(p, mode) {
+    const body = oasis('vbody'), art = body.querySelector('article.o-md:not(.tr)');
+    if (!art || oasis('tr-prog')) return;                 // not a Markdown preview, or busy
+    const now = body.querySelector('article.tr:not([hidden])')?.dataset.mode || 'en';
+    mode = mode || { en: 'zh', zh: 'dual', dual: 'en' }[now];
+    if (mode !== 'en' && !shown.has(p)) {
+      const copy = art.cloneNode(true);
+      copy.classList.add('tr');
+      copy.querySelectorAll('pre').forEach((x) => x.classList.add('notranslate'));
+      // a block that holds other blocks (a list item with a sub-list): only its own text is translated
+      const items = [];
+      for (const b of copy.querySelectorAll(BLOCKS)) {
+        if (b.closest('pre')) continue;
+        const own = b.querySelector(BLOCKS) ? [...b.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()) : null;
+        const text = (own ? own.map((n) => n.textContent).join(' ') : b.textContent).replace(/\s+/g, ' ').trim();
+        if (text && /[A-Za-z]/.test(text)) items.push({ b, own, text });
+      }
+      const prog = document.createElement('div');          // progress line above the preview
+      prog.id = 'tr-prog';
+      prog.className = 'o-small o-muted';
+      prog.style.padding = '8px 30px 0';
+      prog.textContent = 'Translating…';
+      art.before(prog);
+      try {
+        const t = await gtMany(items.map((x) => x.text), (n, all) => { prog.textContent = `Translating ${Math.round(n / all * 100)}%`; });
+        items.forEach(({ b, own }, k) => {
+          if (own) { own[0].textContent = t[k] + ' '; own.slice(1).forEach((n) => { n.textContent = ''; }); }
+          else b.textContent = t[k];
+        });
+      } finally { prog.remove(); }
+      const dual = dualOf(art, copy);
+      copy.dataset.mode = 'zh';
+      copy.insertAdjacentHTML('afterbegin', '<div class="o-small o-muted" style="margin-bottom:8px">繁體中文 · Google Translate</div>');
+      wireLinks(copy, parentOf(p));
+      wireLinks(dual, parentOf(p));
+      shown.set(p, { zh: copy, dual });
+    }
+    if (selected !== p || !art.isConnected) return;       // another file was opened meanwhile
+    const t = shown.get(p) || {};
+    art.hidden = mode !== 'en';
+    for (const m of ['zh', 'dual']) {
+      if (!t[m]) continue;
+      if (!t[m].isConnected) art.after(t[m]);
+      t[m].hidden = m !== mode;
+    }
+  }
+  // English | 中文: each top-level block of the original next to its translation, one grid row each
+  function dualOf(art, copy) {
+    const d = document.createElement('article'), b = [...copy.children];
+    d.className = 'o-md tr dual';
+    d.dataset.mode = 'dual';
+    d.innerHTML = '<div class="wide o-small o-muted" style="margin-bottom:8px">English | 繁體中文 · Google Translate</div>';
+    [...art.children].forEach((x, i) => {
+      if (/^(PRE|HR)$/.test(x.tagName)) { const c = x.cloneNode(true); c.classList.add('wide'); d.append(c); }   // code: once, full width
+      else d.append(x.cloneNode(true), b[i].cloneNode(true));
+    });
+    return d;
+  }
+
+  async function sh(cmd, dir, stream, detach) {
+    if (!stream || detach) {
+      const r = await oasis.shell.exec(detach ? 'start "" ' + cmd : cmd, { cwd: dir, timeout: 20 });
+      if (r.code && !/^explorer/i.test(cmd) && r.stderr) oasis.toast(r.stderr.trim().slice(0, 300), 'warn');
+      return;
+    }
+    if (job) return oasis.toast('A command is still running — stop it first', 'warn');
+    const out = oasis('out-text');
+    oasis('out').hidden = false;
+    oasis('out-title').textContent = '> ' + cmd + '   (in ' + dir + ')';
+    out.textContent = '';
+    job = 'hf-' + Date.now();
+    const t0 = Date.now();
+    try {
+      const r = await oasis.shell.run(cmd, { id: job, cwd: dir, onData: (t) => { out.append(t); out.scrollTop = 1e9; } });
+      out.append(`\n[exit ${r.code} · ${((Date.now() - t0) / 1000).toFixed(1)} s]`);
+    } catch (e) { out.append('ERROR ' + e.message); }
+    job = null;
+    out.scrollTop = 1e9;
+  }
+
+  async function newFile() {
+    const d = new Date(), stamp = '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    const n = await oasis.ui.prompt('File name', stamp + '-notes.md', { title: 'New file in ' + cwd });
+    if (!n) return;
+    const p = join(cwd, n);
+    if (await oasis.fs.exists(p)) return oasis.toast(n + ' already exists', 'warn');
+    await oasis.fs.write(p, /\.md$/i.test(n) ? '# ' + n.replace(/^\d{8}-|\.md$/g, '') + '\n\n' : '');
+    await go(cwd, false);
+    await edit(p);
+  }
+  async function newDir() {
+    const n = await oasis.ui.prompt('Folder name', 'new-folder', { title: 'New folder in ' + cwd });
+    if (n) { await oasis.fs.mkdir(join(cwd, n)); await go(cwd, false); }
+  }
+  async function rename(p) {
+    const n = await oasis.ui.prompt('New name', p.split('\\').pop(), { title: 'Rename' });
+    if (!n || n === p.split('\\').pop()) return;
+    const np = join(parentOf(p), n);
+    await oasis.fs.rename(p, np);
+    await go(cwd, false);
+    await showFile(np);
+  }
+  async function remove(p) {
+    if (!(await oasis.ui.confirm(`Move "${p.split('\\').pop()}" to the trash?\n\n${oasis.standalone ? 'It is kept in ' + dataOf('trash') + '.' : 'System › Recovery can put it back.'}`, { danger: true, ok: 'Move to trash' }))) return;
+    await oasis.fs.remove(p);
+    oasis.toast('Moved to trash', 'success');
+    await go(cwd);
+  }
+  // the clipboard API can refuse ("Document is not focused"); then PowerShell sets the clipboard
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch { await oasis.shell.exec("Set-Clipboard -Value '" + text.replace(/'/g, "''") + "'", { shell: 'powershell', timeout: 20 }); }
+    oasis.toast('Copied: ' + (text.length > 80 ? text.slice(0, 80) + '…' : text), 'info', 1500);
+  }
+
+  // ---------------------------------------------------------------- right-click menu on the preview
+  function menu(x, y, items) {
+    closeMenu();
+    const m = document.createElement('div');
+    m.className = 'ctx';
+    m.id = 'ctx';
+    for (const it of items) {
+      if (it === '-') { m.append(document.createElement('hr')); continue; }
+      const b = document.createElement('button');
+      b.append(oasis.ui.icon(it.icon || 'play'), it.label);
+      b.onclick = () => { closeMenu(); Promise.resolve(it.run()).catch(fail); };
+      m.append(b);
+    }
+    document.body.append(m);
+    m.style.left = Math.max(0, Math.min(x, innerWidth - m.offsetWidth - 4)) + 'px';
+    m.style.top = Math.max(0, Math.min(y, innerHeight - m.offsetHeight - 4)) + 'px';
+  }
+  function closeMenu() { document.getElementById('ctx')?.remove(); }
+  addEventListener('mousedown', (e) => { if (!e.target.closest('#ctx')) closeMenu(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  addEventListener('blur', closeMenu);
+  oasis('vbody').addEventListener('contextmenu', (e) => {
+    if (e.target.closest('textarea, input') || !actions.length) return;   // keep the normal menu in the editor
+    e.preventDefault();
+    const sel = String(getSelection()).trim(), p = selected;
+    const tr = actions.some((a) => a.id === 'b-tr') ? [
+      { label: 'English (original)', icon: 'file', run: () => translateView(p, 'en') },
+      { label: '繁體中文', icon: 'translate', run: () => translateView(p, 'zh') },
+      { label: 'English | 中文', icon: 'translate', run: () => translateView(p, 'dual') }, '-'] : [];
+    menu(e.clientX, e.clientY, [
+      ...(sel ? [{ label: 'Copy text', icon: 'copy', run: () => copy(sel) }, '-'] : []),
+      ...tr,
+      ...actions.filter((a) => a.id !== 'b-tr').map((a) => ({ label: a.label, icon: a.icon, run: () => a.run() })),
+    ]);
+  });
+
+  function parseCSV(text, sep) {
+    const first = text.split(/\r?\n/, 1)[0];
+    sep = sep || [',', ';', '\t'].map((s) => [s, first.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length && rows.length < 5000; i++) {
+      const c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+      else if (c === '"') q = true;
+      else if (c === sep) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((x) => x !== ''));
+  }
+
+  // drop files from Explorer onto the list → copy into the current folder
+  const left = oasis('left');
+  left.addEventListener('dragover', (e) => { e.preventDefault(); left.classList.add('drop'); });
+  left.addEventListener('dragleave', () => left.classList.remove('drop'));
+  left.addEventListener('drop', async (e) => {
+    e.preventDefault(); left.classList.remove('drop');
+    let n = 0;
+    for (const f of e.dataTransfer.files) {
+      if (f.size > 100e6) { oasis.toast(f.name + ' is too big (100 MB max)', 'warn'); continue; }
+      const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = no; r.readAsDataURL(f); });
+      await oasis.fs.write(join(cwd, f.name), b64, { encoding: 'base64' });
+      n++;
+    }
+    if (n) { oasis.toast(`Copied ${n} file(s) here`, 'success'); go(cwd, false).catch(fail); }
+  });
+
+  const fail = (e) => oasis.toast(e.message, 'error');
+
+  // ---------------------------------------------------------------- wiring
+  oasis('root').addEventListener('change', () => {
+    const v = oasis.val('root');
+    if (v === '__add') return addRoot().catch(fail);
+    root = v; go(full(v)).catch(fail);
+  });
+  oasis('b-up').addEventListener('click', () => { if (cwd.length > full(root).length) go(parentOf(cwd)).catch(fail); });
+  oasis('b-refresh').addEventListener('click', () => go(cwd, !selected).catch(fail));
+  oasis('sort').addEventListener('change', () => {
+    sortBy = oasis.val('sort');
+    try { localStorage.setItem('hf.sort', sortBy); } catch (_) { /* no storage */ }
+    renderList();
+  });
+  oasis('b-newfile').addEventListener('click', () => newFile().catch(fail));
+  oasis('b-newdir').addEventListener('click', () => newDir().catch(fail));
+  oasis('b-home').addEventListener('click', () => home().catch(fail));
+  oasis('b-settings').addEventListener('click', () => edit(dataFile('settings.json')).catch(fail));
+  // the manual: MANUAL.md next to index.html, else README.md; shown in the viewer (a single app has no Docs app)
+  const manual = async () => {
+    const m = HERE + '\\MANUAL.md';
+    await showFile((await oasis.fs.exists(m)) ? m : HERE + '\\README.md');
+  };
+  oasis('b-help').addEventListener('click', () => manual().catch(fail));
+  document.addEventListener('keydown', (e) => { if (e.key === 'F1') { e.preventDefault(); manual().catch(fail); } });
+  oasis('filter').addEventListener('input', renderList);
+  oasis('out-close').addEventListener('click', () => { oasis('out').hidden = true; });
+  oasis('out-stop').addEventListener('click', () => job && oasis.shell.kill(job));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); oasis('b-up').click(); }
+  });
+  oasis.ui.commands.push({ label: 'Handy Folder: add a folder', icon: 'folder', run: () => addRoot().catch(fail) },
+    { label: 'Handy Folder: home page', icon: 'home', run: () => home().catch(fail) });
+
+  oasis.ready().then(async (ok) => {
+    if (!ok) return;
+    const sysinfo = await oasis.sys.info();
+    oasisRoot = sysinfo.root;
+    mount = sysinfo.mount || sysinfo.root;
+    single = sysinfo.mode === 'folder';
+    await loadSettings();
+    // optional: oasis.exe --app "sys/handyfolder?dir=D:\some\folder"
+    const want = new URLSearchParams(location.search).get('dir');
+    let savedRoot = '', savedCwd = '';
+    try { savedRoot = localStorage.getItem('hf.root') || ''; savedCwd = localStorage.getItem('hf.cwd') || ''; } catch (_) { /* no storage */ }
+    try { const s = localStorage.getItem('hf.sort'); if (s && [...oasis('sort').options].some((o) => o.value === s)) { sortBy = s; oasis('sort').value = s; } } catch (_) { /* no storage */ }
+    root = cfg.roots.includes(savedRoot) ? savedRoot : cfg.roots[0];
+    renderRoots();
+    codeCmd = cfg.editor || 'code "{file}"';   // VS Code; set "editor" in settings for another one
+    if (want) return addRoot(want);
+    // a single app started with a folder or file: oasis.exe <this app> D:\Projects (Oasis allows it for this run)
+    const arg = sysinfo.mode === 'folder' && (sysinfo.args || []).find((a) => /^([a-z]:|\\\\)/i.test(a));
+    if (arg) {
+      const st = await oasis.fs.stat(arg);
+      const dir = !st.dir ? parentOf(arg) : /^[a-z]:[\\/]*$/i.test(arg) ? arg.slice(0, 2) + '\\' : arg.replace(/[\\/]+$/, '');   // keep "X:\" for a drive
+      if (!cfg.roots.includes(dir)) { cfg.roots.push(dir); runOnly = dir; }
+      root = dir;
+      renderRoots();
+      await go(dir, st.dir);
+      if (!st.dir) await showFile(arg, st);
+      return;
+    }
+    const start = savedCwd && savedCwd.toLowerCase().startsWith(full(root).toLowerCase()) ? savedCwd : full(root);
+    await go(start).catch(() => go(full(root)));
+  }).catch(fail);
+})();
+</script>
+</body>
+</html>

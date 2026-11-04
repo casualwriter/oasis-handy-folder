@@ -1,0 +1,7 @@
+# made on the first run: Oasis data (log, permissions, backups, trash, WebView), Oasis settings
+.oasis/
+oasis.json
+
+# your Handy Folder settings and home page
+settings.json
+home.md
