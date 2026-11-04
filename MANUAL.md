@@ -147,6 +147,8 @@ The buttons of a file are icons in the viewer header. Hold the mouse over one to
 - **New folder** (left bar): asks for a name.
 - **Editor:** a plain text editor. For Markdown it shows a live preview on the right that scrolls with the text; the ▥ button hides or shows the preview (the choice is remembered).
   - **Ctrl+S** saves. Oasis keeps the previous version first (§13).
+  - **Ctrl+F** finds text (not case-sensitive): the match is marked in orange and the box shows `3 / 12`. **Enter**, **F3** or **↓** goes to the next one; **Shift+Enter**, **Shift+F3** or **↑** to the previous one; **Esc** closes the box and leaves the match selected.
+- **Find in a preview:** **Ctrl+F** also works when you only view a file (Markdown, text, code, tables): every match is marked in yellow, the current one in orange. HTML and PDF are shown in their own frame; click into a PDF and use its own Ctrl+F.
   - **Tab** inserts two spaces.
   - **Close** goes back to the preview; it asks first if you have unsaved changes.
 - **Rename** is in the right-click menu.
@@ -277,6 +279,8 @@ In the full Oasis, **System › Recovery** lists them and puts them back. As a s
 | F5 | anywhere | reload (also applies new settings) |
 | Ctrl+S | editor | save |
 | Tab | editor | insert two spaces |
+| Ctrl+F | editor and preview | find text |
+| Enter / F3 / ↓, Shift+Enter / Shift+F3 / ↑ | find box | next / previous match |
 | Esc | menu | close the right-click menu |
 | Alt+Home | full Oasis | back to the launcher |
 

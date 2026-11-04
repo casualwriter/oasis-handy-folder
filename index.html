@@ -37,7 +37,18 @@
   .tile small { display: block; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
   .tools { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 30px 0; }
   .editor { display: flex; height: 100%; }
-  .editor textarea { flex: 1; border: 0; resize: none; padding: 14px; font: 13px/1.6 var(--mono); background: var(--panel); color: var(--text); outline: none; }
+  .editor .ed { flex: 1; position: relative; display: flex; min-width: 0; background: var(--panel); }
+  .editor .hl, .editor textarea { padding: 14px; font: 13px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: break-word; overflow-y: scroll; }
+  .editor .hl { position: absolute; inset: 0; color: transparent; pointer-events: none; }
+  .editor .hl mark { background: #ff9632; color: transparent; border-radius: 2px; }
+  /* the find box (Ctrl+F), shared by the editor and the preview */
+  .find { position: fixed; z-index: 30; display: flex; gap: 4px; align-items: center; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .find[hidden] { display: none; }
+  .find input { width: 200px; }
+  .find span { min-width: 64px; text-align: center; }
+  mark.hit { background: #ffe58a; color: inherit; border-radius: 2px; }
+  mark.hit.cur { background: #ff9632; }
+  .editor textarea { flex: 1; position: relative; border: 0; resize: none; background: transparent; color: var(--text); outline: none; }
   .editor .pv { flex: 1; overflow: auto; border-left: 1px solid var(--line); }
   #out { border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; height: 34%; min-height: 120px; }
   #out .o-row { padding: 6px 12px; border-bottom: 1px solid var(--line); }
@@ -136,7 +147,12 @@ ${single ? '' : `- [Oasis apps](/apps)
 
 ## Notes
 
-Links: \`/path\` = inside the root folder · \`C:\\full\\path\` · \`https://…\` opens the browser · \`run:command\` runs a command.
+Links can be:
+
+- \`/path\`: a file or folder inside the root folder
+- \`C:\\full\\path\`: any file or folder
+- \`https://…\`: a web page, opened in your browser
+- \`run:command\`: a command to run, for example \`run:notepad.exe\`
 `;
   const TEXT = /\.(txt|log|md|markdown|js|mjs|ts|json|go|py|css|html?|xml|ya?ml|toml|ini|cfg|conf|sql|bat|cmd|ps1|sh|c|h|cpp|hpp|cs|java|kt|rs|rb|php|lua|r|csv|tsv|env|gitignore|editorconfig|mod|sum|svg|vue|jsx|tsx)$/i;
   const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', svg: 'image/svg+xml' };
@@ -285,9 +301,12 @@ Links: \`/path\` = inside the root folder · \`C:\\full\\path\` · \`https://…
     reveal: '<path d="M10.7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.7.9l.8 1.2a2 2 0 0 0 1.7.9H20a2 2 0 0 1 2 2v4"/><circle cx="17" cy="17" r="3"/><path d="m21 21-1.9-1.9"/>',
     translate: '<path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/>',
     columns: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
+    'chev-up': '<path d="m18 15-6-6-6 6"/>',
+    'chev-down': '<path d="m6 9 6 6 6-6"/>',
   });
   let actions = [];   // the header buttons, also shown in the right-click menu
   function header(title, buttons) {
+    findHide();   // a new view: the find box and its marks belong to the old one
     const h = oasis('vhead');
     h.innerHTML = '<span class="title"></span>';
     h.firstChild.textContent = title;
@@ -493,13 +512,115 @@ Links: \`/path\` = inside the root folder · \`C:\\full\\path\` · \`https://…
     oasis.toast('Added to your home page', 'success');
   }
 
+  // ---------------------------------------------------------------- find (Ctrl+F)
+  // One find box for the editor and the preview. A "finder" does the searching (not case-sensitive):
+  // go(text, dir) -> [n, all] or null, with dir 1 = next, -1 = previous, 0 = from the current place;
+  // clear() removes the marks, close() also gives the focus back, reset() forgets the current place.
+  // Keys in the box: Enter / F3 next, Shift+Enter / Shift+F3 previous, Esc close.
+  const fBox = document.createElement('div');
+  fBox.className = 'find';
+  fBox.hidden = true;
+  fBox.innerHTML = '<input class="o-input" placeholder="Find…"><span class="o-small o-muted"></span>';
+  const fIn = fBox.querySelector('input'), fCount = fBox.querySelector('span');
+  let finder = null;
+  const findGo = (dir) => {
+    if (!finder) return;
+    const q = fIn.value, r = q ? finder.go(q, dir) : (finder.clear(), null);
+    fCount.textContent = !q ? '' : r ? r[0] + ' / ' + r[1] : 'no match';
+  };
+  for (const [icon, dir, title] of [['chev-up', -1, 'Previous (Shift+Enter)'], ['chev-down', 1, 'Next (Enter)']]) {
+    const b = document.createElement('button');
+    b.className = 'o-btn sm ghost icon';
+    b.title = title;
+    b.append(oasis.ui.icon(icon));
+    b.onmousedown = (e) => e.preventDefault();   // keep the focus in the box
+    b.onclick = () => findGo(dir);
+    fBox.append(b);
+  }
+  document.body.append(fBox);
+  const findShown = () => !fBox.hidden;
+  const findHide = () => { if (finder) finder.clear(); finder = null; fBox.hidden = true; };   // the view changed
+  const findClose = () => { const f = finder; fBox.hidden = true; finder = null; if (f) f.close(); };
+  // open the box over `area` (the top right corner) for this finder; `text` = the selected text, if any
+  const findOpen = (f, area, text) => {
+    if (finder && finder !== f) finder.clear();
+    finder = f;
+    const r = area.getBoundingClientRect();
+    fBox.style.top = (r.top + 8) + 'px';
+    fBox.style.right = (innerWidth - r.right + 22) + 'px';
+    if (text && !text.includes('\n')) fIn.value = text.trim();
+    fBox.hidden = false;
+    f.reset();
+    fIn.select();
+    fIn.focus();
+    findGo(0);
+  };
+  const findNext = (f, area, dir) => { if (finder !== f || fBox.hidden) findOpen(f, area); else findGo(dir); };
+  fIn.addEventListener('input', () => { if (finder) finder.reset(); findGo(0); });
+  fIn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === 'F3') { e.preventDefault(); findGo(e.shiftKey ? -1 : 1); }
+    if (e.key === 'Escape') { e.preventDefault(); findClose(); }
+    if (e.ctrlKey && e.key.toLowerCase() === 'f') { e.preventDefault(); fIn.select(); }
+  });
+  addEventListener('resize', () => { if (finder) findHide(); });
+
+  // the preview: every match in the shown page is wrapped in <mark class="hit">, the current one also has "cur"
+  const pageFinder = (() => {
+    let hits = [], cur = -1, last = '';
+    const clear = () => {
+      for (const m of hits) { const p = m.parentNode; if (!p) continue; m.replaceWith(...m.childNodes); p.normalize(); }
+      hits = []; cur = -1; last = '';
+    };
+    const collect = (q) => {
+      clear();
+      last = q;
+      const lq = q.toLowerCase(), nodes = [];
+      const walk = document.createTreeWalker(oasis('vbody'), NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) => n.parentElement.closest('[hidden], script, style, .tools, .katex') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+      });
+      while (walk.nextNode()) nodes.push(walk.currentNode);
+      for (let node of nodes) {
+        let i;
+        while ((i = node.nodeValue.toLowerCase().indexOf(lq)) >= 0) {
+          const hit = node.splitText(i);
+          node = hit.splitText(q.length);
+          const m = document.createElement('mark');
+          m.className = 'hit';
+          hit.replaceWith(m);
+          m.append(hit);
+          hits.push(m);
+        }
+      }
+    };
+    return {
+      clear,
+      close: clear,
+      reset: () => { last = ''; },   // search again (the page may have changed)
+      go: (q, dir) => {
+        if (q !== last || !hits.length || !hits[0].isConnected) collect(q);
+        if (!hits.length) return null;
+        if (cur >= 0) hits[cur].classList.remove('cur');
+        cur = dir < 0 ? (cur <= 0 ? hits.length - 1 : cur - 1) : dir > 0 ? (cur + 1) % hits.length : Math.max(cur, 0);
+        hits[cur].classList.add('cur');
+        hits[cur].scrollIntoView({ block: 'center' });
+        return [cur + 1, hits.length];
+      },
+    };
+  })();
+  document.addEventListener('keydown', (e) => {   // Ctrl+F / F3 on the preview (the editor handles its own)
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    if (e.ctrlKey && e.key.toLowerCase() === 'f') { e.preventDefault(); findOpen(pageFinder, oasis('vbody'), String(getSelection())); }
+    if (e.key === 'F3') { e.preventDefault(); findNext(pageFinder, oasis('vbody'), e.shiftKey ? -1 : 1); }
+  });
+
   // ---------------------------------------------------------------- editor
   async function edit(p) {
     const text = await oasis.fs.read(p);
     const isMd = /\.(md|markdown)$/i.test(p);
     let dirty = false;
     const body = oasis('vbody');
-    body.innerHTML = `<div class="editor"><textarea spellcheck="false"></textarea>${isMd ? '<div class="pv"><article class="o-md"></article></div>' : ''}</div>`;
+    body.innerHTML = '<div class="editor"><div class="ed"><div class="hl"></div><textarea spellcheck="false"></textarea></div>'
+      + (isMd ? '<div class="pv"><article class="o-md"></article></div>' : '') + '</div>';
     const ta = body.querySelector('textarea');
     ta.value = text;
     const pv = body.querySelector('.pv article');
@@ -519,8 +640,37 @@ Links: \`/path\` = inside the root folder · \`C:\\full\\path\` · \`https://…
     render();
     ta.addEventListener('input', () => { dirty = true; render(); });
     const save = async () => { await oasis.fs.write(p, ta.value); dirty = false; oasis.toast('Saved (the old version is kept in ' + (oasis.standalone ? dataOf('backup') : 'Recovery') + ')', 'success', 1500); };
+    // Find in the text (the shared find box, Ctrl+F). The match is painted in a layer behind the
+    // transparent text, so it shows while you type in the find box.
+    const hl = body.querySelector('.hl');
+    let at = -1;   // start of the match shown, -1 = none
+    const textFinder = {
+      reset: () => { at = -1; },
+      clear: () => { at = -1; hl.textContent = ''; },
+      close: () => { at = -1; hl.textContent = ''; ta.focus(); },   // the match stays selected
+      go: (q, dir) => {
+        const t = ta.value.toLowerCase(), from = at < 0 ? ta.selectionStart : at;
+        q = q.toLowerCase();
+        at = dir < 0 ? t.lastIndexOf(q, from - 1) : t.indexOf(q, dir > 0 ? from + 1 : from);
+        if (at < 0) at = dir < 0 ? t.lastIndexOf(q) : t.indexOf(q);   // wrap around
+        if (at < 0) { hl.textContent = ''; return null; }
+        let n = 0, all = 0;
+        for (let k = t.indexOf(q); k >= 0; k = t.indexOf(q, k + q.length)) { all++; if (k <= at) n = all; }
+        const v = ta.value, end = at + q.length;
+        ta.setSelectionRange(at, end);
+        hl.innerHTML = oasis.esc(v.slice(0, at)) + '<mark>' + oasis.esc(v.slice(at, end)) + '</mark>' + oasis.esc(v.slice(end)) + '\n ';
+        ta.scrollTop = Math.max(0, hl.querySelector('mark').offsetTop - ta.clientHeight / 3);
+        hl.scrollTop = ta.scrollTop;
+        return [n, all];
+      },
+    };
+    ta.addEventListener('input', () => { if (at >= 0) textFinder.clear(); });   // the text changed: the mark is out of place
+    ta.addEventListener('scroll', () => { hl.scrollTop = ta.scrollTop; });
     ta.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); save().catch(fail); }
+      if (e.ctrlKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); findOpen(textFinder, ta.parentNode, ta.value.slice(ta.selectionStart, ta.selectionEnd)); }
+      if (e.key === 'F3') { e.preventDefault(); e.stopPropagation(); findNext(textFinder, ta.parentNode, e.shiftKey ? -1 : 1); }
+      if (e.key === 'Escape' && findShown()) { e.preventDefault(); findClose(); }
       if (e.key === 'Tab') { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); }
     });
     header('✎ ' + p.split('\\').pop(), [

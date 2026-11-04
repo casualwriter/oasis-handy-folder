@@ -20,7 +20,7 @@ AI assistants write Markdown everywhere: plans, reports, meeting notes, READMEs,
 ## View and edit most files
 
 - **View:** HTML in a safe frame, JSON and CSV as tables, PDF, images, and text and code with line numbers.
-- **Edit directly:** HTML, JSON, CSV, TXT, logs, CSS, JavaScript, Python, PowerShell, batch, INI, YAML, SQL and other text files open in the same editor. Every save keeps the previous version.
+- **Edit directly:** HTML, JSON, CSV, TXT, logs, CSS, JavaScript, Python, PowerShell, batch, INI, YAML, SQL and other text files open in the same editor, with **Ctrl+F** to find text. Every save keeps the previous version.
 
 ## And a handier Explorer
 

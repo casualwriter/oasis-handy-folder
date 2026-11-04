@@ -20,7 +20,7 @@
 ## 大部分檔案都能看、能改
 
 - **直接看**：HTML 放在隔離的框架裡顯示，JSON 和 CSV 直接變成表格，還有 PDF、圖片，以及附行號的文字檔和程式碼。
-- **直接改**：HTML、JSON、CSV、TXT、記錄檔、CSS、JavaScript、Python、PowerShell、批次檔、INI、YAML、SQL 等文字檔，都用同一個編輯器打開修改。每次存檔都會保留上一版。
+- **直接改**：HTML、JSON、CSV、TXT、記錄檔、CSS、JavaScript、Python、PowerShell、批次檔、INI、YAML、SQL 等文字檔，都用同一個編輯器打開修改，按 **Ctrl+F** 可以搜尋文字。每次存檔都會保留上一版。
 
 ## 比檔案總管更順手
 
