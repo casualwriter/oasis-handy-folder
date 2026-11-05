@@ -277,6 +277,7 @@ Links can be:
       li.children[2].textContent = key === 'date' ? day(f.mtime).slice(2, 10) : f.dir ? '' : size(f.size);
       li.title = f.name + '\n' + day(f.mtime) + (f.dir ? '' : ' · ' + size(f.size));
       li.onclick = () => { const p = join(cwd, f.name); if (f.dir) go(p).catch(fail); else showFile(p, f).catch(fail); };
+      li.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(e, join(cwd, f.name), f); };
       if (selected === join(cwd, f.name)) li.className = 'on';
       ul.append(li);
     }
@@ -303,6 +304,7 @@ Links can be:
     columns: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/>',
     'chev-up': '<path d="m18 15-6-6-6 6"/>',
     'chev-down': '<path d="m6 9 6 6 6-6"/>',
+    paste: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
   });
   let actions = [];   // the header buttons, also shown in the right-click menu
   function header(title, buttons) {
@@ -333,11 +335,13 @@ Links can be:
       { label: 'Explorer', icon: 'folder', run: () => sh('explorer .', cwd, false) },
       { label: '+ shortcut', icon: 'pin', title: 'Add this folder to your home page', run: () => addShortcut(cwd) },
       readme && /\.(md|markdown)$/i.test(readme.name) && { label: 'Print README', icon: 'print', run: async () => oasis.print(await mdHtml(await oasis.fs.read(join(cwd, readme.name)), cwd), readme.name) },
-      { label: 'Copy path', icon: 'copy', title: 'Copy path: ' + cwd, run: () => copy(cwd) },
+      { label: 'Copy this folder', icon: 'copy', title: 'Copy this folder (paste it here or in Explorer)', run: () => copyItem(cwd) },
+      { label: 'Paste', icon: 'paste', title: 'Paste files copied here or in Explorer (Ctrl+V)', run: () => paste() },
+      { label: 'Copy path', icon: 'copy', menuOnly: true, run: () => copy(cwd) },
     ]);
     const nDir = entries.filter((f) => f.dir).length, nFile = entries.length - nDir, total = entries.reduce((t, f) => t + (f.dir ? 0 : f.size), 0);
     body.innerHTML = '<div class="tools" id="tools"></div>' + (readme ? '<article class="o-md" id="readme"></article>'
-      : `<div class="info o-muted">${nDir} folders · ${nFile} files · ${size(total)}<br>No README.md here — add one with <b>New file</b> to describe this folder.<br><br>Tip: drop files from Explorer onto the list to copy them here.</div>`);
+      : `<div class="info o-muted">${nDir} folders · ${nFile} files · ${size(total)}<br>No README.md here — add one with <b>New file</b> to describe this folder.<br><br>Tip: drop files from Explorer onto the list, or paste them with Ctrl+V, to copy them here.</div>`);
     for (const [label, cmd] of Object.entries(cfg.tools)) {
       const b = document.createElement('button');
       b.className = 'o-btn sm';
@@ -371,7 +375,9 @@ Links can be:
       run && { label: 'Run', icon: 'play', primary: true, title: 'Run: ' + (run === 'open' ? 'Windows default' : fill(run, p)), run: () => runFile(p, run) },
       codeCmd && { label: cfg.editor ? 'Open in editor' : 'Open in VS Code', icon: 'code', menuOnly: true, run: () => sh(fill(codeCmd, p), parentOf(p), false) },
       { label: 'Reveal in Explorer', icon: 'reveal', run: () => sh(`explorer /select,"${p}"`, parentOf(p), false) },
-      { label: 'Copy path', icon: 'copy', title: 'Copy path: ' + p, run: () => copy(p) },
+      { label: 'Copy file', icon: 'copy', title: 'Copy file (Ctrl+C; paste it here or in Explorer)', run: () => copyItem(p) },
+      { label: 'Copy path', icon: 'copy', menuOnly: true, run: () => copy(p) },
+      { label: 'Paste here', icon: 'paste', menuOnly: true, run: () => paste() },
       { label: 'Rename', icon: 'rename', menuOnly: true, run: () => rename(p) },
       { label: 'Move to trash', icon: 'trash', danger: true, title: 'Move to trash (it can be brought back)', run: () => remove(p) },
     ]);
@@ -827,20 +833,51 @@ Links can be:
     if (!n || n === p.split('\\').pop()) return;
     const np = join(parentOf(p), n);
     await oasis.fs.rename(p, np);
+    const wasShown = selected === p;
     await go(cwd, false);
-    await showFile(np);
+    if (wasShown) await showFile(np);
   }
   async function remove(p) {
     if (!(await oasis.ui.confirm(`Move "${p.split('\\').pop()}" to the trash?\n\n${oasis.standalone ? 'It is kept in ' + dataOf('trash') + '.' : 'System › Recovery can put it back.'}`, { danger: true, ok: 'Move to trash' }))) return;
     await oasis.fs.remove(p);
     oasis.toast('Moved to trash', 'success');
-    await go(cwd);
+    await go(cwd, selected === p);   // the file shown is gone: show the folder
   }
   // the clipboard API can refuse ("Document is not focused"); then PowerShell sets the clipboard
   async function copy(text) {
     try { await navigator.clipboard.writeText(text); }
     catch { await oasis.shell.exec("Set-Clipboard -Value '" + text.replace(/'/g, "''") + "'", { shell: 'powershell', timeout: 20 }); }
     oasis.toast('Copied: ' + (text.length > 80 ? text.slice(0, 80) + '…' : text), 'info', 1500);
+  }
+
+  // Copy and paste files through the Windows clipboard, so they also paste into (and come from) Explorer.
+  // PowerShell does the work; the paths go in environment variables, so no quoting is needed.
+  const ps = (script, dir, env) => oasis.shell.exec(script, { shell: 'powershell', cwd: dir, timeout: 300, env });
+  async function copyItem(p) {
+    const r = await ps('Set-Clipboard -LiteralPath $env:HF_SRC', parentOf(p), { HF_SRC: p });
+    if (r.code) throw new Error((r.stderr || '').trim() || 'Copy failed');
+    oasis.toast(`Copied "${p.split('\\').pop()}": paste with Ctrl+V here or in Explorer`, 'info', 2500);
+  }
+  // A name that is taken gets " - Copy" (then " - Copy (2)" …), like Explorer.
+  // (No double quotes in the script: it goes through the command line. Get-Clipboard -Format FileDropList
+  // returns the whole list as one object in PowerShell 5, so the .NET clipboard is used.)
+  const PASTE = `Add-Type -AssemblyName System.Windows.Forms
+$d = $env:HF_DEST; if (-not $d) { throw 'no folder' }; $n = 0
+foreach ($s in [Windows.Forms.Clipboard]::GetFileDropList()) {
+  $f = Get-Item -LiteralPath $s -ErrorAction Stop; $b = $f.Name; $x = ''
+  if (-not $f.PSIsContainer) { $b = $f.BaseName; $x = $f.Extension }
+  $t = [IO.Path]::Combine($d, $b + $x); $i = 1
+  while (Test-Path -LiteralPath $t) { $c = ' - Copy'; if ($i -gt 1) { $c += ' (' + $i + ')' }; $t = [IO.Path]::Combine($d, $b + $c + $x); $i++ }
+  Copy-Item -LiteralPath $f.FullName -Destination $t -Recurse -ErrorAction Stop; $n++
+}
+$n`;
+  async function paste(dest = cwd) {
+    const r = await ps(PASTE, dest, { HF_DEST: dest });
+    if (r.code) throw new Error((r.stderr || '').trim().split('\n')[0] || 'Paste failed');
+    const n = +r.stdout.trim() || 0;
+    if (!n) return oasis.toast('No files on the clipboard (copy them here or in Explorer first)', 'warn');
+    oasis.toast(`Pasted ${n} item(s) into ${dest === cwd ? 'this folder' : dest.split('\\').pop()}`, 'success');
+    await go(cwd, !selected);
   }
 
   // ---------------------------------------------------------------- right-click menu on the preview
@@ -877,6 +914,26 @@ Links can be:
       ...tr,
       ...actions.filter((a) => a.id !== 'b-tr').map((a) => ({ label: a.label, icon: a.icon, run: () => a.run() })),
     ]);
+  });
+
+  // ---------------------------------------------------------------- right-click menu on the file list
+  // On a file or folder: copy, paste (into that folder, like Explorer), rename, delete. On the empty list: paste here.
+  function itemMenu(e, p, f) {
+    menu(e.clientX, e.clientY, [
+      { label: 'Open', icon: f.dir ? 'folder' : 'file', run: () => f.dir ? go(p) : showFile(p, f) },
+      '-',
+      { label: f.dir ? 'Copy folder' : 'Copy file', icon: 'copy', run: () => copyItem(p) },
+      { label: f.dir ? 'Paste into this folder' : 'Paste here', icon: 'paste', run: () => paste(f.dir ? p : cwd) },
+      { label: 'Copy path', icon: 'copy', run: () => copy(p) },
+      '-',
+      { label: 'Rename', icon: 'rename', run: () => rename(p) },
+      { label: 'Move to trash', icon: 'trash', run: () => remove(p) },
+    ]);
+  }
+  oasis('list').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    menu(e.clientX, e.clientY, [{ label: 'Paste here', icon: 'paste', run: () => paste() },
+      { label: 'New file', icon: 'file', run: () => newFile() }, { label: 'New folder', icon: 'folder', run: () => newDir() }]);
   });
 
   function parseCSV(text, sep) {
@@ -941,7 +998,12 @@ Links can be:
   oasis('out-close').addEventListener('click', () => { oasis('out').hidden = true; });
   oasis('out-stop').addEventListener('click', () => job && oasis.shell.kill(job));
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Backspace' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); oasis('b-up').click(); }
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+    if (e.key === 'Backspace') { e.preventDefault(); oasis('b-up').click(); }
+    // Ctrl+C copies the file shown (when no text is selected); Ctrl+V pastes files into this folder
+    const k = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase();
+    if (k === 'c' && selected && !String(getSelection())) { e.preventDefault(); copyItem(selected).catch(fail); }
+    if (k === 'v') { e.preventDefault(); paste().catch(fail); }
   });
   oasis.ui.commands.push({ label: 'Handy Folder: add a folder', icon: 'folder', run: () => addRoot().catch(fail) },
     { label: 'Handy Folder: home page', icon: 'home', run: () => home().catch(fail) });

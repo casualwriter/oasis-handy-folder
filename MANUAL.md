@@ -84,12 +84,14 @@ Drag the bar between the two sides to resize them. The width, the root, the fold
 
 - **Root list** (top left): the folders you work in. Inside the full Oasis the first one is `Oasis folder` (the folder that holds `oasis.exe`). A single app starts with its own folder. Choose **＋ Add a folder…** to add one (§12).
 - **Click a folder** to enter it. **↑** or **Backspace** goes up (not above the root). The path line under the bar shows where you are.
-- **Folder page:** when you enter a folder, the right side shows its `README.md` (or `README.txt`), the folder tools (§7), and buttons: Explorer, + shortcut, Print README, Copy path. A folder without a README shows how many folders and files it has.
+- **Folder page:** when you enter a folder, the right side shows its `README.md` (or `README.txt`), the folder tools (§7), and buttons: Explorer, + shortcut, Print README, Copy this folder, Paste. A folder without a README shows how many folders and files it has.
 - **Sort:** name A→Z or Z→A (numbers in order: `b2` before `b10`), date (newest or oldest), size (largest or smallest), or type (by extension). Folders always stay on top; equal items are ordered by name.
 - **Filter:** type in the box to show only names that contain the text.
 - **Hidden names:** `.git`, `node_modules`, `__pycache__` and `.venv` are not listed. Change this with `hidden` in the settings (§10).
 - **⟳ Refresh** reads the folder again (after you change files outside Handy Folder).
+- **Right-click a file or folder in the list** for Open, Copy, Paste (into that folder, when you right-click a folder), Copy path, Rename and Move to trash. Right-click the empty part of the list for Paste here, New file and New folder.
 - **Drop files** from Explorer onto the list to **copy** them into the current folder (100 MB per file at most). A file with the same name is replaced; the old one is kept as a backup (§13).
+- **Copy and paste files:** **Ctrl+C** or the copy button copies the file shown; on a folder page the copy button copies the whole folder. **Ctrl+V** or the **Paste** button copies them into the current folder. It uses the Windows clipboard, so you can also paste in Explorer, or copy in Explorer and paste here. A name that is taken gets ` - Copy`, like in Explorer; nothing is replaced.
 
 ## 4. Preview files
 
@@ -132,9 +134,11 @@ The buttons of a file are icons in the viewer header. Hold the mouse over one to
 | ► Run | button | run the file with its command (§7); only for types listed in `run` |
 | Launch app | button | open an Oasis app (`apps\…\index.html`; full Oasis only) |
 | Reveal in Explorer | button | open Explorer with the file selected |
-| Copy path | button | copy the full path |
+| Copy file | button | copy the file, to paste here or in Explorer (Ctrl+C) |
 | Move to trash | button | move the file to the Oasis trash (§13) |
 | Open in VS Code / Open in editor | menu | open the file in your editor (`editor` in §10) |
+| Copy path | menu | copy the full path |
+| Paste here | menu | paste copied files into this folder (Ctrl+V) |
 | Rename | menu | give the file a new name |
 | Translate | menu | Markdown only: English, 繁體中文, or both side by side (§8) |
 | Copy text | menu | when you have selected some text |
@@ -280,6 +284,8 @@ In the full Oasis, **System › Recovery** lists them and puts them back. As a s
 | Ctrl+S | editor | save |
 | Tab | editor | insert two spaces |
 | Ctrl+F | editor and preview | find text |
+| Ctrl+C | a file is shown, no text selected | copy the file |
+| Ctrl+V | outside the editor | paste files into this folder |
 | Enter / F3 / ↓, Shift+Enter / Shift+F3 / ↑ | find box | next / previous match |
 | Esc | menu | close the right-click menu |
 | Alt+Home | full Oasis | back to the launcher |
