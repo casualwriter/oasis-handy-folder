@@ -27,6 +27,7 @@ AI assistants write Markdown everywhere: plans, reports, meeting notes, READMEs,
 - **Safe click.** Clicking a file only shows it. **► Run** runs scripts (`.py`, `.ps1`, `.bat` …) with live output.
 - **Folder tools:** CMD here, PowerShell here, Explorer, Git status, and your own commands.
 - **Your home page** of folder, file, web and command shortcuts.
+- **Search in files** (Ctrl+Shift+F): find words in the Markdown, text, HTML and PDF files of a folder and its sub-folders, Chinese included; click a match to open the file with the word marked.
 - **Drop files** from Explorer onto the list to copy them in, or **copy and paste** files (Ctrl+C / Ctrl+V), also to and from Explorer. Right-click a file in the list to copy, paste, rename or move it to trash (it can be brought back).
 
 ## Light and portable

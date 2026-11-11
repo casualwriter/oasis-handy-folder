@@ -152,10 +152,11 @@ The buttons of a file are icons in the viewer header. Hold the mouse over one to
 - **Editor:** a plain text editor. For Markdown it shows a live preview on the right that scrolls with the text; the ▥ button hides or shows the preview (the choice is remembered).
   - **Ctrl+S** saves. Oasis keeps the previous version first (§13).
   - **Ctrl+F** finds text (not case-sensitive): the match is marked in orange and the box shows `3 / 12`. **Enter**, **F3** or **↓** goes to the next one; **Shift+Enter**, **Shift+F3** or **↑** to the previous one; **Esc** closes the box and leaves the match selected.
-- **Find in a preview:** **Ctrl+F** also works when you only view a file (Markdown, text, code, tables): every match is marked in yellow, the current one in orange. HTML and PDF are shown in their own frame; click into a PDF and use its own Ctrl+F.
   - **Tab** inserts two spaces.
   - **Close** goes back to the preview; it asks first if you have unsaved changes.
 - **Rename** is in the right-click menu.
+- **Find in a preview:** **Ctrl+F** also works when you only view a file (Markdown, text, code, tables): every match is marked in yellow, the current one in orange. HTML and PDF are shown in their own frame; click into a PDF and use its own Ctrl+F.
+- **Search in files:** on a folder page, **Search in files** (or **Ctrl+Shift+F**, or right-click the empty list) finds words in the documents of the folder and its sub-folders: Markdown, text, HTML, PDF (text only), CSV, JSON, XML, YAML, INI. Each match shows the file, the heading it is under, and the words in context; click it to open the file with the word marked. Chinese works, also short words. The first search reads every document; later ones read only the files that changed. The index is kept in a hidden `.kb` folder inside that folder (delete it any time). Needs an Oasis with `kb.js`; with an older `oasis.exe` the button is not shown.
 
 ## 7. Run files and folder tools
 
@@ -286,6 +287,7 @@ In the full Oasis, **System › Recovery** lists them and puts them back. As a s
 | Ctrl+F | editor and preview | find text |
 | Ctrl+C | a file is shown, no text selected | copy the file |
 | Ctrl+V | outside the editor | paste files into this folder |
+| Ctrl+Shift+F | outside the editor | search in files (this folder and below) |
 | Enter / F3 / ↓, Shift+Enter / Shift+F3 / ↑ | find box | next / previous match |
 | Esc | menu | close the right-click menu |
 | Alt+Home | full Oasis | back to the launcher |

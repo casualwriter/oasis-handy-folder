@@ -20,6 +20,10 @@
   #list .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #list .mt { color: var(--muted); font-size: 11px; white-space: nowrap; }
   .left.drop { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  .hits { padding: 10px 24px; max-width: 980px; }
+  .hits .row { padding: 9px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .hits .row:hover b { color: var(--accent); }
+  .hits .snip { font-size: 13px; color: var(--text-2); white-space: pre-wrap; margin-top: 3px; max-height: 5.6em; overflow: hidden; }
   .right { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .vhead { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
   .vhead .title { font-weight: 600; margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -106,6 +110,8 @@
 <script src="/_oasis/oasis.js"></script>
 <script src="/_oasis/ui.js"></script>
 <script src="/_oasis/md.js"></script>
+<script src="/_oasis/kb.js"></script>   <!-- search in files; an older oasis.exe has no kb.js, then the search is not offered -->
+
 <script>
 (function () {
   'use strict';
@@ -121,7 +127,7 @@
   const DEFAULTS = {
     roots: ['~'],                                 // default root ("~" = the Oasis folder; a single app: its own folder); add more with the root list
     editor: '',                                   // command for the editor button; empty = VS Code (code "{file}")
-    hidden: '^(\\.git|\\.oasis|node_modules|__pycache__|\\.venv)$',
+    hidden: '^(\\.git|\\.oasis|\\.kb|\\.dev|\\.cowork|node_modules|__pycache__|\\.venv)$',
     run: {                                          // extension → command. {file} {name} {dir}; "open" = Windows default app
       py: 'python "{file}"', 'bat,cmd': '"{file}"', ps1: 'powershell -NoProfile -ExecutionPolicy Bypass -File "{file}"',
       js: 'node "{file}"', go: 'go run "{file}"', 'exe,msi,lnk,url,hta': 'open',
@@ -335,6 +341,7 @@ Links can be:
       { label: 'Explorer', icon: 'folder', run: () => sh('explorer .', cwd, false) },
       { label: '+ shortcut', icon: 'pin', title: 'Add this folder to your home page', run: () => addShortcut(cwd) },
       readme && /\.(md|markdown)$/i.test(readme.name) && { label: 'Print README', icon: 'print', run: async () => oasis.print(await mdHtml(await oasis.fs.read(join(cwd, readme.name)), cwd), readme.name) },
+      oasis.kb && { label: 'Search in files', icon: 'search', title: 'Search the text of the documents in this folder and below (Ctrl+Shift+F)', run: () => searchFiles() },
       { label: 'Copy this folder', icon: 'copy', title: 'Copy this folder (paste it here or in Explorer)', run: () => copyItem(cwd) },
       { label: 'Paste', icon: 'paste', title: 'Paste files copied here or in Explorer (Ctrl+V)', run: () => paste() },
       { label: 'Copy path', icon: 'copy', menuOnly: true, run: () => copy(cwd) },
@@ -916,6 +923,39 @@ $n`;
     ]);
   });
 
+  // ---------------------------------------------------------------- search in files (lib/kb.js)
+  // The index lives in <folder>\.kb\ and is brought up to date before each search (only changed files are read).
+  let lastQ = '';
+  async function searchFiles(q) {
+    if (q == null) q = await oasis.ui.prompt('Words to find in the documents (md, txt, html, csv, json …) of this folder and its sub-folders', lastQ, { title: 'Search in files' });
+    if (!q || !q.trim()) return;
+    lastQ = q = q.trim();
+    const dir = cwd, body = oasis('vbody');
+    selected = null; renderList();
+    header('🔍 ' + q + '  ·  ' + dir, [
+      { label: 'Search again', icon: 'search', run: () => searchFiles() },
+      { label: 'Back to the folder', icon: 'folder', run: () => go(dir) },
+    ]);
+    body.innerHTML = '<div class="o-empty">Reading the documents…</div>';
+    const kb = await oasis.kb.open(dir);
+    let hits, stats;
+    try {
+      stats = await kb.update((p) => { if (p.total > 3 && body.firstChild) body.firstChild.textContent = `Reading the documents… ${p.done} / ${p.total}`; });
+      hits = await kb.search(q, { limit: 60 });
+    } finally { await kb.close(); }
+    if (cwd !== dir) return;   // the user went elsewhere meanwhile
+    const mark = (s) => oasis.esc(s || '').replace(/«/g, '<mark>').replace(/»/g, '</mark>');
+    body.innerHTML = `<div class="hits"><p class="o-muted o-small">${hits.length ? hits.length + (hits.length === 60 ? '+' : '') + ' match(es)' : 'No match'} in ${stats.files} document(s).</p>` +
+      hits.map((h, i) => `<div class="row" data-i="${i}"><b>${oasis.esc(h.file)}</b> <span class="o-muted o-small">${oasis.esc(h.title !== h.file ? '› ' + h.title : '')}</span><div class="snip">${mark(h.snippet)}</div></div>`).join('') + '</div>';
+    body.querySelectorAll('.row').forEach((row) => {
+      row.onclick = async () => {
+        const h = hits[+row.dataset.i], p = join(dir, h.file.replace(/\//g, '\\'));
+        await showFile(p);
+        findOpen(pageFinder, oasis('vbody'), (q.split(/\s+/).find((w) => [...w].length >= 3) || q.split(/\s+/)[0]));
+      };
+    });
+  }
+
   // ---------------------------------------------------------------- right-click menu on the file list
   // On a file or folder: copy, paste (into that folder, like Explorer), rename, delete. On the empty list: paste here.
   function itemMenu(e, p, f) {
@@ -933,6 +973,7 @@ $n`;
   oasis('list').addEventListener('contextmenu', (e) => {
     e.preventDefault();
     menu(e.clientX, e.clientY, [{ label: 'Paste here', icon: 'paste', run: () => paste() },
+      ...(oasis.kb ? [{ label: 'Search in files', icon: 'search', run: () => searchFiles() }] : []),
       { label: 'New file', icon: 'file', run: () => newFile() }, { label: 'New folder', icon: 'folder', run: () => newDir() }]);
   });
 
@@ -1004,6 +1045,7 @@ $n`;
     const k = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase();
     if (k === 'c' && selected && !String(getSelection())) { e.preventDefault(); copyItem(selected).catch(fail); }
     if (k === 'v') { e.preventDefault(); paste().catch(fail); }
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f' && oasis.kb) { e.preventDefault(); searchFiles().catch(fail); }
   });
   oasis.ui.commands.push({ label: 'Handy Folder: add a folder', icon: 'folder', run: () => addRoot().catch(fail) },
     { label: 'Handy Folder: home page', icon: 'home', run: () => home().catch(fail) });
